@@ -96,10 +96,10 @@ contract Pottery is Ownable {
         string calldata seed
     ) external onlyOwner validQuiz(quizId) {
         Quiz storage quiz = quizzes[quizId];
-        require(quiz.endedTimestamp < block.timestamp);
-        require(quiz.state == QuizState.Started);
-        require(keccak256(abi.encodePacked(keys, seed)) == quiz.keysHash);
-        require(keys.length == quiz.keys.length);
+        require(quiz.endedTimestamp < block.timestamp, "Quiz has not ended");
+        require(quiz.state == QuizState.Started, "Invalid quiz state");
+        require(keccak256(abi.encodePacked(keys, seed)) == quiz.keysHash, "Invalid keys");
+        require(keys.length == quiz.keys.length, "Invalid keys length");
         for (uint256 i = 0; i < keys.length; i++) {
             quiz.keys[i] = keys[i];
         }
@@ -128,7 +128,7 @@ contract Pottery is Ownable {
             playerToAnswersHash[msg.sender][quizId] ==
                 keccak256(abi.encodePacked(answers, seed, msg.sender))
         );
-        Quiz memory quiz = quizzes[quizId];
+        Quiz storage quiz = quizzes[quizId];
         require(quiz.state == QuizState.Revealed);
         require(quiz.keys.length == answers.length);
         uint256 point;
