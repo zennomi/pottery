@@ -11,6 +11,9 @@ module.exports = {
       }, {
         privateKey: "1814b58085b15a3e72b314f62c97712598355a677b5b11eebad27f3a4bc6a10a",
         balance: "100000000000000000000"
+      }, {
+        privateKey: "1814b58085b15a3e72b314f62c97712598355a677b5b11eebad27f3a4bc6a10b",
+        balance: "100000000000000000000"
       }]
     }
   }
