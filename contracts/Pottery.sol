@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/ISBT721.sol";
 
 contract Pottery is Ownable {
     using SafeERC20 for IERC20;
@@ -25,7 +26,8 @@ contract Pottery is Ownable {
 
     uint256 public CALCULATING_TIME = 1 days; // period for player to get their rank and claim later
 
-    Quiz[] quizzes;
+    Quiz[] internal quizzes;
+    ISBT721 internal babToken;
 
     mapping(address => bool) hosts;
 
@@ -33,6 +35,10 @@ contract Pottery is Ownable {
         internal playerToAnswersHash;
     mapping(address => mapping(uint256 => uint256)) internal playerToPoint;
     mapping(address => mapping(uint256 => bool)) internal playerClaimed;
+
+    constructor(address _babAddress) {
+        babToken = ISBT721(_babAddress);
+    }
 
     /*  ╔══════════════════════════════╗
         ║            EVENTS            ║
@@ -79,6 +85,10 @@ contract Pottery is Ownable {
     /*  ╔══════════════════════════════╗
         ║       INTERNAL FUNCTION      ║
         ╚══════════════════════════════╝ */
+
+    function _validatePlayer(address player) internal view returns (bool) {
+        return babToken.balanceOf(player) > 0;
+    }
 
     function _validateKeys(
         bytes32 _hash,
@@ -161,6 +171,7 @@ contract Pottery is Ownable {
         external
         validQuiz(quizId)
     {
+        require(_validatePlayer(msg.sender), "User does not have bab token");
         Quiz memory quiz = quizzes[quizId];
         require(quiz.state == QuizState.Started, "Invalid state");
         require(quiz.endedTimestamp >= block.timestamp, "Quiz ended");

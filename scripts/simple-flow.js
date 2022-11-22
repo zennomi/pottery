@@ -1,17 +1,28 @@
 const hre = require("hardhat");
 
-const { ethers } = hre;
+const { ethers, upgrades } = hre;
 
 async function main() {
-    const Pottery = await hre.ethers.getContractFactory("Pottery");
-    const FakeToken = await hre.ethers.getContractFactory("FakeToken");
-    const pottery = await Pottery.deploy();
+    const [admin, user1, user2] = await ethers.getSigners();
+
+    const SBT = await ethers.getContractFactory("SBT");
+    const sbt = await upgrades.deployProxy(SBT, [
+        "SoulBound Token",
+        "SBT",
+        admin.address,
+    ]);
+
+    const Pottery = await ethers.getContractFactory("Pottery");
+    const FakeToken = await ethers.getContractFactory("FakeToken");
+    const pottery = await Pottery.deploy(sbt.address);
     const fakeToken = await FakeToken.deploy("Fake Token", "UPBO");
     await pottery.deployed();
     await fakeToken.deployed();
-    fakeToken.hack(pottery.address, 100);
 
-    const [admin, user1, user2] = await ethers.getSigners();
+    // hack
+    fakeToken.hack(pottery.address, 100);
+    await sbt.attest(user1.address);
+    await sbt.attest(user2.address);
 
     const quiz = {
         keys: [1, 2, 3, 4],
