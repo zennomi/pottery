@@ -24,6 +24,11 @@ contract Pottery is Ownable {
         QuizState state;
     }
 
+    struct Answer {
+        bytes32 hash;
+        uint256 timestamp;
+    }
+
     uint256 public CALCULATING_TIME = 1 days; // period for player to get their rank and claim later
 
     Quiz[] internal quizzes;
@@ -31,8 +36,7 @@ contract Pottery is Ownable {
 
     mapping(address => bool) hosts;
 
-    mapping(address => mapping(uint256 => bytes32))
-        internal playerToAnswersHash;
+    mapping(address => mapping(uint256 => Answer)) internal playerToAnswer;
     mapping(address => mapping(uint256 => uint256)) internal playerToPoint;
     mapping(address => mapping(uint256 => bool)) internal playerClaimed;
 
@@ -53,7 +57,7 @@ contract Pottery is Ownable {
 
     event KeysRevealed(uint256 quizId, uint8[] keys, uint256 timestamp);
 
-    event UserSubmit(uint256 quizId, address player);
+    event UserSubmit(uint256 quizId, address player, uint256 timestamp);
 
     event UserCalculate(
         uint256 quizId,
@@ -175,8 +179,11 @@ contract Pottery is Ownable {
         Quiz memory quiz = quizzes[quizId];
         require(quiz.state == QuizState.Started, "Invalid state");
         require(quiz.endedTimestamp >= block.timestamp, "Quiz ended");
-        playerToAnswersHash[msg.sender][quizId] = answersHash;
-        emit UserSubmit(quizId, msg.sender);
+        playerToAnswer[msg.sender][quizId] = Answer({
+            hash: answersHash,
+            timestamp: block.timestamp
+        });
+        emit UserSubmit(quizId, msg.sender, block.timestamp);
     }
 
     function calculatePoint(
@@ -186,7 +193,7 @@ contract Pottery is Ownable {
     ) external validQuiz(quizId) {
         require(
             _validateAnswers(
-                playerToAnswersHash[msg.sender][quizId],
+                playerToAnswer[msg.sender][quizId].hash,
                 msg.sender,
                 answers,
                 seed
@@ -242,5 +249,9 @@ contract Pottery is Ownable {
 
     function getQuizInfo(uint256 _quizId) external view returns (Quiz memory) {
         return quizzes[_quizId];
+    }
+
+    function getAnswer(uint256 _quizId, address _player) external view returns (Answer memory) {
+        return playerToAnswer[_player][_quizId];
     }
 }
