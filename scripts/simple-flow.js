@@ -38,27 +38,25 @@ async function main() {
     await pottery.createQuiz(keysHash, quiz.endedTimestamp, quiz.rewards, fakeToken.address);
 
     const user1Answers = [1, 2, 3, 4];
-    const user1AnswersHash = await pottery.getAnswersHash(user1.address, user1Answers, 'user1');
 
     const user2Answers = [1, 2, 4, 3];
-    const user2AnswersHash = await pottery.getAnswersHash(user2.address, user2Answers, 'user2');
 
-    await pottery.connect(user1).submitAnswer(0, user1AnswersHash);
-    await pottery.connect(user2).submitAnswer(0, user2AnswersHash);
+    await pottery.connect(user1).submitAnswer(0, user1Answers);
+    await pottery.connect(user2).submitAnswer(0, user2Answers);
 
     await ethers.provider.send("evm_increaseTime", [60 * 60 * 1000]);
     await ethers.provider.send("evm_mine");
 
     await pottery.revealKeys(0, quiz.keys, quiz.seed);
 
-    await pottery.connect(user1).calculatePoint(0, user1Answers, 'user1');
-    await pottery.connect(user2).calculatePoint(0, user2Answers, 'user2');
+    await pottery.connect(user1).calculatePoint(0);
+    await pottery.connect(user2).calculatePoint(0);
 
     await ethers.provider.send("evm_increaseTime", [25 * 60 * 60 * 1000]);
     await ethers.provider.send("evm_mine");
 
     await pottery.connect(user1).claimReward(0);
-    await pottery.connect(user2).claimReward(0);
+    // await pottery.connect(user2).claimReward(0);
 
     console.log((await fakeToken.balanceOf(user1.address)).toString());
     console.log((await fakeToken.balanceOf(user2.address)).toString());
