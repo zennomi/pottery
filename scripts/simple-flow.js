@@ -25,7 +25,7 @@ async function main() {
     await sbt.attest(user2.address);
 
     const quiz = {
-        keys: [1, 2, 3, 4],
+        keys: "1234",
         endedTimestamp: Math.floor(Date.now() / 1000 + 30 * 60), // 30min
         seed: "UpBo",
         rewards: 100
@@ -33,13 +33,13 @@ async function main() {
 
     await pottery.setHost(admin.address, true);
 
-    const keysHash = await pottery.getKeysHash(quiz.keys, quiz.seed);
+    const keysHash = await pottery.getKeyHash(quiz.keys, quiz.seed);
 
     await pottery.createQuiz(keysHash, quiz.endedTimestamp, quiz.rewards, fakeToken.address);
 
-    const user1Answers = [1, 2, 3, 4];
+    const user1Answers = "1234";
 
-    const user2Answers = [1, 2, 4, 3];
+    const user2Answers = "1234";
 
     await pottery.connect(user1).submitAnswer(0, user1Answers);
     await pottery.connect(user2).submitAnswer(0, user2Answers);
@@ -47,16 +47,10 @@ async function main() {
     await ethers.provider.send("evm_increaseTime", [60 * 60 * 1000]);
     await ethers.provider.send("evm_mine");
 
-    await pottery.revealKeys(0, quiz.keys, quiz.seed);
-
-    await pottery.connect(user1).calculatePoint(0);
-    await pottery.connect(user2).calculatePoint(0);
-
-    await ethers.provider.send("evm_increaseTime", [25 * 60 * 60 * 1000]);
-    await ethers.provider.send("evm_mine");
+    await pottery.revealKey(0, quiz.keys, quiz.seed);
 
     await pottery.connect(user1).claimReward(0);
-    // await pottery.connect(user2).claimReward(0);
+    await pottery.connect(user2).claimReward(0);
 
     console.log((await fakeToken.balanceOf(user1.address)).toString());
     console.log((await fakeToken.balanceOf(user2.address)).toString());

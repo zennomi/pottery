@@ -10,28 +10,18 @@ contract Pottery is Ownable {
     using SafeERC20 for IERC20;
 
     enum QuizState {
-        OPEN, // game started
-        FINISHED // keys revealed
+        OPEN,
+        FINISHED
     }
 
     struct Quiz {
-        uint8[] keys; // reveal later
-        bytes32 keysHash; // don't let admin be úp bô
+        string key; // reveal later
+        bytes32 keyHash; // don't let admin úp bô
         uint256 endedTimestamp; // player can't submit answers anymore
-        uint256 revealedTimestamp; // player can get their point now
-        uint256 highestPoint;
-        uint256 winnerCount;
         uint256 rewardAmount; // total reward tokens
         address tokenAddress; // reward's address
         QuizState state;
     }
-
-    struct Answer {
-        uint8[] options;
-        uint256 timestamp;
-    }
-
-    uint256 public CALCULATING_TIME = 1 days; // period for player to get their rank and claim later
 
     Quiz[] internal quizzes;
     ISBT721 internal babToken;
@@ -39,8 +29,8 @@ contract Pottery is Ownable {
 
     mapping(address => bool) hosts;
 
-    mapping(address => mapping(uint256 => Answer)) internal playerToAnswer;
-    mapping(address => mapping(uint256 => uint256)) internal playerToPoint;
+    mapping(uint256 => mapping(string => uint256)) internal quizToAnswerCount;
+    mapping(address => mapping(uint256 => string)) internal playerToAnswer;
     mapping(address => mapping(uint256 => bool)) internal playerClaimed;
 
     constructor(address _babAddress) {
@@ -51,18 +41,16 @@ contract Pottery is Ownable {
         ║            EVENTS            ║
         ╚══════════════════════════════╝ */
 
-    event QuizStarted(
+    event QuizOpen(
         uint256 quizId,
         uint256 endedTimestamp,
         uint256 rewardAmount,
         address tokenAddress
     );
 
-    event KeysRevealed(uint256 quizId, uint8[] keys, uint256 timestamp);
+    event QuizFinished(uint256 quizId, string key, uint256 timestamp);
 
     event UserSubmit(uint256 quizId, address player, uint256 timestamp);
-
-    event UserCalculate(uint256 quizId, address player, uint256 point);
 
     event UserClaim(uint256 quizId, address player, uint256 rewardAmount);
 
@@ -92,12 +80,12 @@ contract Pottery is Ownable {
         return babToken.balanceOf(player) > 0;
     }
 
-    function _validateKeys(
+    function _validateKey(
         bytes32 _hash,
-        uint8[] memory _keys,
+        string memory _key,
         string memory _seed
     ) internal pure returns (bool) {
-        if (_hash == sha256(abi.encodePacked(_keys, _seed))) {
+        if (_hash == sha256(abi.encodePacked(_key, _seed))) {
             return true;
         } else {
             return false;
@@ -109,18 +97,15 @@ contract Pottery is Ownable {
         ╚══════════════════════════════╝ */
 
     function createQuiz(
-        bytes32 keysHash,
+        bytes32 keyHash,
         uint256 endedTimestamp,
         uint256 rewardAmount,
         address tokenAddress
     ) external onlyHost returns (uint256) {
         Quiz memory newQuiz = Quiz({
-            keys: new uint8[](0),
-            keysHash: keysHash,
+            key: "",
+            keyHash: keyHash,
             endedTimestamp: endedTimestamp,
-            revealedTimestamp: 0,
-            highestPoint: 0,
-            winnerCount: 0,
             rewardAmount: rewardAmount,
             tokenAddress: tokenAddress,
             state: QuizState.OPEN
@@ -128,82 +113,51 @@ contract Pottery is Ownable {
         quizzes.push(newQuiz);
         uint256 newQuizId = quizzes.length - 1;
         EnumerableSet.add(activeQuizList, newQuizId);
-        emit QuizStarted(newQuizId, endedTimestamp, rewardAmount, tokenAddress);
+        emit QuizOpen(newQuizId, endedTimestamp, rewardAmount, tokenAddress);
         return newQuizId;
     }
 
-    function revealKeys(
+    function revealKey(
         uint256 quizId,
-        uint8[] memory keys,
+        string calldata key,
         string calldata seed
     ) external onlyHost validQuiz(quizId) {
         Quiz storage quiz = quizzes[quizId];
         require(quiz.endedTimestamp < block.timestamp, "Quiz has not ended");
-        require(quiz.state == QuizState.OPEN, "Invalid quiz state");
-        require(_validateKeys(quiz.keysHash, keys, seed), "Invalid keys");
-        quiz.keys = keys;
-        quiz.revealedTimestamp = block.timestamp;
-        quiz.state = QuizState.FINISHED;
+        require(quiz.state == QuizState.OPEN, "Already revealed key");
+        require(_validateKey(quiz.keyHash, key, seed), "Invalid key");
+        quiz.key = key;
         EnumerableSet.remove(activeQuizList, quizId);
-        emit KeysRevealed(quizId, keys, block.timestamp);
+        emit QuizFinished(quizId, key, block.timestamp);
     }
 
     function submitAnswer(
         uint256 quizId,
-        uint8[] memory options
+        string calldata answer
     ) external validQuiz(quizId) {
         require(_validatePlayer(msg.sender), "User does not have bab token");
         Quiz memory quiz = quizzes[quizId];
-        require(quiz.state == QuizState.OPEN, "Invalid state");
+        require(quiz.state == QuizState.OPEN, "Already revealed key");
         require(quiz.endedTimestamp >= block.timestamp, "Quiz ended");
-        playerToAnswer[msg.sender][quizId] = Answer({
-            options: options,
-            timestamp: block.timestamp
-        });
+        playerToAnswer[msg.sender][quizId] = answer;
+        quizToAnswerCount[quizId][answer]++;
         emit UserSubmit(quizId, msg.sender, block.timestamp);
-    }
-
-    function calculatePoint(uint256 quizId) external validQuiz(quizId) {
-        Quiz storage quiz = quizzes[quizId];
-        require(quiz.state == QuizState.FINISHED, "Invalid state");
-        require(
-            playerToAnswer[msg.sender][quizId].timestamp > 0,
-            "Not join yet"
-        );
-        uint8[] memory userOptions = playerToAnswer[msg.sender][quizId].options;
-        require(
-            quiz.keys.length == userOptions.length,
-            "Invalid answers length"
-        );
-        uint256 point;
-        for (uint256 i = 0; i < userOptions.length; i++) {
-            if (userOptions[i] == quiz.keys[i]) point++;
-        }
-        playerToPoint[msg.sender][quizId] = point;
-        if (quiz.highestPoint == point) {
-            quiz.winnerCount++;
-        } else if (quiz.highestPoint < point) {
-            quiz.highestPoint = point;
-            quiz.winnerCount = 1;
-        }
-        emit UserCalculate(quizId, msg.sender, point);
     }
 
     function claimReward(uint256 quizId) external validQuiz(quizId) {
         Quiz memory quiz = quizzes[quizId];
         require(
-            quiz.revealedTimestamp + CALCULATING_TIME < block.timestamp,
+            quiz.state != QuizState.FINISHED,
             "Cannot claim now"
         );
-        require(quiz.winnerCount > 0, "No one won this quiz");
         require(
-            playerToPoint[msg.sender][quizId] == quiz.highestPoint,
-            "Not enough rewards"
+            keccak256(abi.encodePacked((playerToAnswer[msg.sender][quizId]))) == keccak256(abi.encodePacked((quiz.key))),
+            "Wrong answer"
         );
         require(!playerClaimed[msg.sender][quizId], "Already claimed");
         // transfer reward
         playerClaimed[msg.sender][quizId] = true;
-        uint256 playerRewards = quiz.rewardAmount / quiz.winnerCount;
+        uint256 playerRewards = quiz.rewardAmount / quizToAnswerCount[quizId][quiz.key];
         IERC20(quiz.tokenAddress).safeTransfer(msg.sender, playerRewards);
         emit UserClaim(quizId, msg.sender, playerRewards);
     }
@@ -212,23 +166,19 @@ contract Pottery is Ownable {
       ║            GETTERS           ║
       ╚══════════════════════════════╝ */
 
-    function getKeysHash(
-        uint8[] memory answers,
+    function getKeyHash(
+        string memory key,
         string memory seed
     ) external pure returns (bytes32) {
-        return sha256(abi.encodePacked(answers, seed));
+        return sha256(abi.encodePacked(key, seed));
     }
 
     function getQuizInfo(uint256 _quizId) external view returns (Quiz memory) {
         return quizzes[_quizId];
     }
 
-    function getAnswer(uint256 _quizId) external view returns (Answer memory) {
+    function getAnswer(uint256 _quizId) external view returns (string memory) {
         return playerToAnswer[msg.sender][_quizId];
-    }
-
-    function getPoint(uint256 _quizId) external view returns (uint256) {
-        return playerToPoint[msg.sender][_quizId];
     }
 
     function getActiveQuizCount() external view returns (uint256) {
